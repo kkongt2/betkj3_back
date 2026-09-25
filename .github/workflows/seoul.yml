@@ -1,0 +1,63 @@
+name: Validate Seoul-only data and strategy
+on:
+  push:
+    branches: ['feature/seoul-only']
+    paths: ['scripts/**', 'tests/**', '*.js', 'index.html', '.github/workflows/seoul.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: seoul-research
+  cancel-in-progress: true
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: kkongt2/timeline
+          ref: main
+          path: _seed
+          sparse-checkout: |
+            training
+            scripts/model-research
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests beautifulsoup4 charset-normalizer
+      - name: Isolate Seoul source and recompute every feature
+        run: |
+          python scripts/seoul-only.py
+          python tests/rolling-features.py
+          python scripts/prepare-weighted-v3.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build and verify Seoul-only history
+        run: |
+          node --check app.js
+          node tests/qpl-policy.cjs
+          node scripts/build-qpl-history.cjs
+          node tests/seoul.cjs
+      - name: Repeat Seoul-only chronological search
+        run: |
+          g++ -O3 -fopenmp -std=c++17 scripts/search-v3.cpp -o /tmp/search-v3
+          node scripts/rolling-search.cjs
+          node tests/seoul-report.cjs
+      - name: Validate mobile controls and historical parity
+        run: |
+          node tests/site.cjs
+          node tests/archive.cjs
+      - name: Preserve verified Seoul data and report
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A data history qpl-history.json qpl-history-years rolling-report.json
+          if ! git diff --cached --quiet; then
+            git commit -m 'Recompute Seoul-only history, scaling and quarterly strategy'
+            git pull --rebase origin feature/seoul-only
+            git push origin HEAD:feature/seoul-only
+          fi

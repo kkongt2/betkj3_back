@@ -1,0 +1,101 @@
+'use strict';
+const fs=require('node:fs'),http=require('node:http'),path=require('node:path'),assert=require('node:assert/strict'),{chromium}=require('playwright');
+const M=require('../model.js'),T=require('../tuning-model.js'),P=require('../qpl-policy.js'),H=require('../qpl-history-engine.js');
+const root=path.resolve(__dirname,'..');
+const races=Array.from({length:12},(_,ri)=>({date:'20260913',venue:'seoul',race_no:ri+1,start_time:'10:00',title:'서울 경주',horses:Array.from({length:10},(_,i)=>({number:i+1,name:'출전마 '+(i+1),weighted_v3_features:Array.from({length:17},(_,j)=>Math.max(0,Math.min(1,.85-i*.06+Math.sin(ri*3+i+j)*.25))),weighted_v3_support:{starts:ri%6,available:Array(17).fill(ri%3!==0)}})),official_result:{status:'confirmed',starters:Array.from({length:10},(_,i)=>i+1),place:{status:'confirmed',payouts:[{numbers:[1],odds:2},{numbers:[3],odds:3},{numbers:[5],odds:4}]},pair:{status:'confirmed',payouts:[{numbers:[1,3],odds:3+ri},{numbers:[1,5],odds:5},{numbers:[3,5],odds:6}]}}}));
+const rows=races.map(r=>T.pack(M.analyze(r)));
+const manifest={schema:2,scope:'seoul',policyVersion:P.VERSION,generatedAt:'2026-09-20T00:00:00Z',rows};
+const doc={date:'20260913',updated_at:'2026-09-20T00:00:00Z',scope:'seoul',races,calendar:[{date:'20260913',venues:['seoul']}]};
+const server=http.createServer((req,res)=>{
+ const p=new URL(req.url,'http://localhost').pathname;
+ const json=p==='/qpl-history.json'?manifest:p==='/data/latest.json'||p.startsWith('/data/calendar/')?doc:null;
+ if(json){res.setHeader('Content-Type','application/json');res.end(JSON.stringify(json));return;}
+ const file=path.resolve(root,p==='/'?'index.html':'.'+p);
+ if(!file.startsWith(root+path.sep)||!fs.existsSync(file)||!fs.statSync(file).isFile()){res.statusCode=404;res.end();return;}
+ res.setHeader('Content-Type',file.endsWith('.js')?'application/javascript':file.endsWith('.css')?'text/css':file.endsWith('.json')?'application/json':'text/html');res.end(fs.readFileSync(file));
+});
+(async()=>{
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));const browser=await chromium.launch({headless:true,args:['--no-sandbox']}),errors=[];
+ try{for(const fallback of [false,true]){
+  const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+  await context.route('**/*',route=>route.request().url().startsWith('http://127.0.0.1:')?route.continue():route.abort());
+  const page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
+  await page.addInitScript(({fallback})=>{window.__evaluations=0;if(fallback)window.Worker=undefined;else{const Original=window.Worker;window.Worker=class extends Original{postMessage(m,...rest){if(m.type==='evaluate')window.__evaluations++;return super.postMessage(m,...rest);}};}},{fallback});
+  await page.goto('http://127.0.0.1:'+server.address().port);await page.locator('#pairLead .lead-number').waitFor();
+  assert.equal(await page.locator('#screeningEnabled').isChecked(),false);
+  assert.equal(await page.locator('#screeningControls').isVisible(),false);
+  assert.equal(await page.locator('#screeningOnlyControl').isVisible(),false);
+  assert.equal(await page.locator('.screening-badge').count(),0);
+  assert.equal(await page.locator('#raceOverview .overview-row').count(),races.length);
+  await page.locator('#screeningEnabled').check();await page.locator('#screeningProduct').waitFor();await page.locator('#pairLead .screening-badge').waitFor();
+  const config=await page.evaluate(()=>strategySettings());const expected=await H.create(rows).evaluate({...config,includeScreening:true},'20220101','20260920');
+  const beforePair=await page.locator('#pairLead .lead-number').innerText(),beforeCount=await page.evaluate(()=>window.__evaluations);
+  for(const level of [0,25,50,75,100,60]){
+   await page.locator('#screeningStrictness').evaluate((n,v)=>{n.value=String(v);n.dispatchEvent(new Event('input'));},level);
+   const e=expected.screening.points[level];
+   assert.equal(await page.locator('#screeningStrictnessNumber').inputValue(),String(level));
+   assert.equal(await page.locator('#screeningRatio').innerText(),(e.ratio*100).toFixed(2)+'%');
+   assert.equal(await page.locator('#screeningProduct').innerText(),e.product===null?'—':e.product.toFixed(4)+'배');
+   assert.equal(await page.locator('#screeningRate').innerText(),e.rate===null?'—':(e.rate*100).toFixed(2)+'%');
+   assert.equal(await page.locator('#pairLead .lead-number').innerText(),beforePair,'strictness does not change the pair');
+   assert.equal(await page.locator('#raceOverview .screening-badge.chosen').count(),e.evaluated);
+  }
+  assert.equal(await page.evaluate(()=>window.__evaluations),beforeCount,'slider must not reload or re-evaluate history');
+  await page.locator('#screeningMore').click();assert.equal(await page.locator('#screeningStrictness').inputValue(),'61');
+  await page.reload();await page.locator('#screeningProduct').waitFor();assert.equal(await page.locator('#screeningStrictness').inputValue(),'61');
+  await page.locator('#screeningStrictness').evaluate(n=>{n.value='100';n.dispatchEvent(new Event('input'));});
+  await page.locator('#screeningOnly').check();assert((await page.locator('#raceOverview').innerText()).includes('선별된 경기가 없습니다'));
+  await page.locator('#screeningEnabled').uncheck();
+  assert.equal(await page.locator('.screening-badge').count(),0);
+  assert.equal(await page.locator('#screeningOnly').isChecked(),false);
+  assert.equal(await page.locator('#raceOverview .overview-row').count(),races.length);
+  assert(!(await page.locator('#overviewStatus').innerText()).includes('선별'));
+  await page.locator('#screeningEnabled').check();
+  assert.equal(await page.locator('#screeningStrictness').inputValue(),'100');
+  await page.locator('#screeningStats [data-screening-level="50"]').click();
+  assert.equal(await page.locator('#screeningStrictnessNumber').inputValue(),'50');
+  await page.locator('#screeningOnly').check();
+  assert.equal(await page.locator('#raceOverview .overview-row').count(),expected.screening.points[50].evaluated);
+  await page.locator('#screeningOnly').uncheck();
+  await page.selectOption('#anchorRank','3');await page.selectOption('#partnerMin','2');await page.selectOption('#partnerMax','6');
+  await page.waitForFunction(()=>document.querySelector('#screeningStats').getAttribute('aria-busy')==='false');
+  const config2=await page.evaluate(()=>strategySettings()),expected2=await H.create(rows).evaluate({...config2,includeScreening:true},'20220101','20260920');
+  assert.equal(await page.locator('#screeningProduct').innerText(),expected2.screening.points[50].product.toFixed(4)+'배');
+  await page.locator('#weight-0').evaluate(n=>{n.value='60';n.dispatchEvent(new Event('input'));});
+  await page.waitForFunction(()=>document.querySelector('#screeningStats').getAttribute('aria-busy')==='false');
+  const config3=await page.evaluate(()=>strategySettings()),expected3=await H.create(rows).evaluate({...config3,includeScreening:true},'20220101','20260920');
+  assert.equal(await page.locator('#screeningProduct').innerText(),expected3.screening.points[50].product.toFixed(4)+'배');
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'mobile width overflow');
+  await page.locator('.race-screening').screenshot({path:path.join(process.env.SCREENING_SCREENSHOT_DIR||'/tmp','screening-'+(fallback?'fallback':'worker')+'.png')});
+  await page.locator('#screeningEnabled').uncheck();await page.reload();await page.locator('#pairLead .lead-number').waitFor();
+  assert.equal(await page.locator('#screeningEnabled').isChecked(),false);
+  assert.equal(await page.locator('.screening-badge').count(),0);
+  assert.equal(await page.locator('#raceOverview .overview-row').count(),races.length);
+  await page.selectOption('#anchorRank','1');await page.selectOption('#partnerMin','3');await page.selectOption('#partnerMax','4');
+  await page.locator('#resetWeights').click();
+  await page.waitForFunction(()=>document.querySelector('#screeningStats').getAttribute('aria-busy')==='false');
+  await page.selectOption('#weightSearchMode','joint');await page.selectOption('#weightSearchTarget','60');
+  await page.locator('#weightSearchSeconds').fill('1');
+  await page.locator('#startWeightSearch').click();
+  await page.waitForFunction(()=>!document.querySelector('#applyWeightSearch').disabled,{},{timeout:60000});
+  assert((await page.locator('#weightSearchResult').innerText()).includes('시간 순서 검증'));
+  const product=await page.locator('#weightSearchResult .search-metrics strong').nth(2).innerText();
+  await page.locator('#applyWeightSearch').click();
+  assert.equal(await page.locator('#screeningEnabled').isChecked(),false,'apply preserves OFF');
+  assert.equal(await page.locator('.screening-badge').count(),0);
+  await page.locator('#screeningEnabled').check();
+  await page.waitForFunction(()=>document.querySelector('#screeningStats').getAttribute('aria-busy')==='false');
+  assert.equal(await page.locator('#screeningProduct').innerText(),product,'applied and searched selected product must match');
+  assert((await page.locator('#screeningModelInfo').textContent()).includes('공동 탐색'),JSON.stringify(await page.evaluate(()=>({settings:strategySettings(),info:document.querySelector('#screeningModelInfo').textContent}))));
+  await page.locator('#saveWeightSearch').click();
+  const applied=await page.evaluate(()=>strategySettings());
+  assert(applied.screening);assert.equal(applied.screening.target,60);
+  await page.reload();await page.locator('#screeningProduct').waitFor();
+  assert.deepEqual(await page.evaluate(()=>strategySettings().screening),applied.screening);
+  assert.equal(await page.locator('#screeningProduct').innerText(),product);
+  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'joint mobile width overflow');
+  await context.close();
+ }
+ assert.deepEqual(errors,[]);console.log('PASS mobile worker/fallback, exact selected stats, instant slider, unchanged pairs, persistence, date filtering and setting invalidation');
+ }finally{await browser.close();server.close();}
+})().catch(e=>{console.error(e);server.close();process.exitCode=1;});

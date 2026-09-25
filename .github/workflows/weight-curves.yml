@@ -1,0 +1,23 @@
+name: Verify weight sensitivity curves
+on:
+  push:
+    branches: ['feature/weight-curves']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify controls and exact historical curves
+        run: |
+          node --check app.js
+          node --check weight-curves.js
+          node --check qpl-history-worker.js
+          node tests/site.cjs
+          node tests/weight-curves.cjs --archive

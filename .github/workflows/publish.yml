@@ -1,0 +1,130 @@
+name: Sync race data and publish betkj3
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['data/**', 'qpl-history.json', 'qpl-history-years/**', 'history/**', 'rolling-report.json', 'top5-presets.json']
+  workflow_call:
+  workflow_dispatch:
+  schedule:
+    - cron: '7,27,47 * * * *'
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: betkj3-pages
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/checkout@v4
+        with:
+          repository: kkongt2/timeline
+          ref: kra-mobile-pages
+          path: _source
+          sparse-checkout: data
+          persist-credentials: false
+      - name: Copy the complete race archive
+        run: |
+          mkdir -p data
+          rsync -a --delete --filter='protect /calendar/***' --filter='protect /market-odds/***' _source/data/ data/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - uses: actions/checkout@v4
+        with:
+          repository: kkongt2/timeline
+          ref: main
+          path: _seed
+          sparse-checkout: |
+            training
+            scripts/model-research
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests beautifulsoup4 charset-normalizer
+      - run: python scripts/seoul-only.py
+      - run: python tests/rolling-features.py
+      - run: python tests/last5-features.py
+      - run: python tests/last5-detail.py
+      - run: python scripts/prepare-weighted-v3.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate strategy and race archive
+        run: |
+          node --check app.js
+          node tests/qpl-policy.cjs
+          node scripts/build-qpl-history.cjs
+          node scripts/refresh-rolling.cjs
+          node tests/seoul.cjs
+          node tests/site.cjs
+          node tests/last5-detail.cjs --archive
+          node tests/race-selection.cjs
+          node tests/joint-search.cjs
+          node tests/weight-curves.cjs
+          node tests/weight-search.cjs
+          node tests/global-search.cjs
+          node tests/parallel-search.cjs
+          node tests/runner-search.cjs
+          node tests/search-minutes.cjs
+          node tests/evaluation-period.cjs --archive
+          node tests/archive.cjs
+          node tests/seoul-report.cjs
+      - name: Verify mobile race screening in browser
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        run: |
+          npm install --no-save --package-lock=false playwright@1.58.2
+          npx playwright install --with-deps chromium
+          node tests/race-selection-browser.cjs
+          node tests/last5-detail-browser.cjs
+          node tests/global-search-browser.cjs
+          node tests/parallel-search-browser.cjs
+          node tests/runner-search-browser.cjs
+      - name: Preserve computed history for branch and workflow deployments
+        run: |
+          git add -A rolling-report.json data history qpl-history.json qpl-history-years
+          if ! git diff --cached --quiet; then
+            git commit -m "Update historical QPL range evaluation data"
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+      - uses: actions/configure-pages@v5
+      - name: Prepare static site
+        run: |
+          mkdir -p _site
+          cp index.html style.css app.js model.js race-selection-model.js race-selection-panel.js qpl-policy.js tuning-model.js qpl-history-engine.js qpl-history-worker.js weight-curve-engine.js weight-curves.js weight-balance.js global-weight-search.js parallel-search.js search-island-worker.js weight-search-engine.js joint-search-engine.js weight-search.js runner-search-contract.js runner-search-panel.js history-summary.js qpl-history.json strategy-presets.js rolling-panel.js rolling-report.json top5-panel.js top5-presets.json _site/
+          cp -R data _site/data
+          cp -R qpl-history-years _site/qpl-history-years
+          touch _site/.nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Verify published model and controls
+        env:
+          SITE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          node - <<'NODE'
+          const assert=require('node:assert/strict');
+          (async()=>{
+            const base=process.env.SITE_URL,stamp=Date.now();
+            const read=async path=>{const r=await fetch(new URL(path+'?verify='+stamp,base));assert(r.ok,path+' HTTP '+r.status);return r.text();};
+            const [html,model,history]=await Promise.all([read('index.html'),read('tuning-model.js'),read('qpl-history.json')]);
+            assert(html.includes('screeningStrictness'));assert((await read('race-selection-model.js')).includes('race-screening-v1'));assert((await read('race-selection-panel.js')).includes('screeningProduct'));assert(html.includes('2022년 이후'));assert((await read('history-summary.js')).includes('2023년 이후 비교'));assert(html.includes('anchorRank'));assert(!html.includes('anchorMode'));assert(html.includes('추천 선정에는 배당을 사용하지 않습니다'));assert(html.includes('startWeightSearch'));assert(html.includes('weightSearchMethod'));assert((await read('global-weight-search.js')).includes('GlobalWeightSearch'));for(const path of ['weight-balance.js','weight-search-engine.js','weight-search.js'])assert((await read(path)).length>100);assert(html.includes('weight-16'));for(let i=0;i<21;i++)assert(html.includes('weight-curve-'+i));assert((await read('weight-curves.js')).includes('최고값 적용'));assert((await read('weight-curve-engine.js')).includes('WeightCurveEngine'));assert(html.includes('평균 적중 배당'));assert(model.includes('user-weighted-seoul-last5-v2'));
+            const manifest=JSON.parse(history);assert.equal(manifest.scope,'seoul');assert(manifest.races>4000);const app=await read('app.js');assert(!app.includes('market-odds'));assert(!app.includes('anchorMode'));const policy=await read('qpl-policy.js');assert(!policy.includes("anchorMode"));const live=JSON.parse(await read('data/latest.json'));assert.equal(live.scope,'seoul');assert(live.races.every(r=>r.venue==='seoul'));assert(live.calendar.every(d=>d.venues.every(v=>v==='seoul')));assert(!/부경|제주|전국|weightVenue/.test(html));for(const shard of manifest.shards){const d=JSON.parse(await read(shard.url));assert(d.rows.every(r=>r.venue==='seoul'));assert(d.rows.every(r=>r.horses.every(h=>h[7]?.available?.length===21))); }const rolling=JSON.parse(await read('rolling-report.json'));assert.equal(rolling.scope,'seoul');assert.equal(rolling.policyVersion,manifest.policyVersion);assert(rolling.folds.length>=4);assert(rolling.selected.all.evaluated>=Math.ceil(rolling.selected.all.total*.4));
+            const top5=JSON.parse(await read('top5-presets.json'));assert.equal(top5.scope,'seoul');assert.equal(top5.presets.length,1);assert(top5.weightBalance);assert(top5.presets.every(p=>!('anchorMode' in p.settings)&&[17,21].includes(p.settings.weights.length)&&p.settings.weights.every((w,i)=>Number.isInteger(w)&&w>=(i<17?3:0)&&w<=20)&&p.settings.weights.reduce((a,b)=>a+b,0)===100&&top5.weightBalance.groups.every(g=>{const n=g.indices.reduce((s,i)=>s+p.settings.weights[i],0);return n>=g.min&&n<=g.max;})));assert(html.includes('top5Presets'));
+            console.log('PASS published Seoul-only controls, model, live calendar, every historical shard and quarterly report',base);
+          })().catch(e=>{console.error(e);process.exitCode=1});
+          NODE
+

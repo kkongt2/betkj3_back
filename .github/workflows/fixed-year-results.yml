@@ -1,0 +1,38 @@
+name: Verify fixed winner yearly results
+on:
+  push:
+    branches: ['feature/fixed-year-results']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify parallel search and chronological separation
+        run: |
+          node tests/parallel-search.cjs
+          node tests/weight-search.cjs
+          node tests/joint-search.cjs
+          node tests/global-search.cjs
+          node tests/site.cjs
+          node tests/runner-search.cjs
+          node tests/search-minutes.cjs
+          node tests/fixed-year-results.cjs
+      - name: Verify mobile worker and fallback
+        run: |
+          npm install --no-save --package-lock=false playwright@1.58.2
+          npx playwright install --with-deps chromium
+          node tests/parallel-search-browser.cjs
+          node tests/global-search-browser.cjs
+          node tests/runner-search-browser.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: parallel-search-mobile
+          path: /tmp/parallel-search-*.png

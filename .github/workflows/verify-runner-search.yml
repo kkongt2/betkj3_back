@@ -1,0 +1,40 @@
+name: Verify Runner weight search
+on:
+  push:
+    branches: ['feature/runner-search']
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify Runner and existing search
+        run: |
+          node tests/runner-search.cjs
+          node tests/site.cjs
+          node tests/parallel-search.cjs
+          node tests/global-search.cjs
+      - name: Mobile Runner results and local search compatibility
+        run: |
+          npm install --no-save --package-lock=false playwright@1.58.2
+          npx playwright install --with-deps chromium
+          node tests/runner-search-browser.cjs
+          node tests/parallel-search-browser.cjs
+      - name: Run full-history search on actual Runner CPUs
+        run: |
+          node -e "require('fs').writeFileSync('_runner-request.json',JSON.stringify({schema:1,requestId:'runner-install-check',seconds:5,method:'de',objective:'product',parallel:true,balanced:false,joint:false,target:60,settings:{...require('./tuning-model.js').settings(),anchorRank:1,min:2,max:10}}))"
+          node scripts/runner-search.cjs _runner-request.json
+      - name: Verify public result publication
+        run: node scripts/publish-runner-result.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: runner-search-verification
+          path: |
+            /tmp/runner-search-mobile.png
+            _runner-out/result.json

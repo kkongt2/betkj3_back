@@ -1,0 +1,30 @@
+name: Verify mobile weight curve controls
+on:
+  push:
+    branches: ['feature/weight-curves']
+    paths: ['app.js', 'weight-curves.js', 'qpl-history-worker.js', 'index.html', 'style.css', 'tests/curve-browser.cjs', '.github/workflows/curve-browser.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser test tools
+        run: |
+          npm install --prefix /tmp/curve-ui-deps playwright@1.62.1
+          node /tmp/curve-ui-deps/node_modules/playwright/cli.js install --with-deps chromium
+      - name: Test mobile worker and fallback controls
+        env:
+          NODE_PATH: /tmp/curve-ui-deps/node_modules
+        run: node tests/curve-browser.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: weight-curve-mobile-preview
+          path: /tmp/weight-curves-*.png

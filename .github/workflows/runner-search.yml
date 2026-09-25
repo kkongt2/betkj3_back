@@ -1,0 +1,278 @@
+name: Runner weight search
+run-name: Runner search · ${{ github.actor }}
+on:
+  workflow_dispatch:
+    inputs:
+      request:
+        description: '사이트에서 복사한 탐색 조건(JSON)을 붙여넣으세요'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: runner-weight-search
+  cancel-in-progress: false
+jobs:
+  search1:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Search segment 1
+        env:
+          SEARCH_REQUEST: ${{ inputs.request }}
+        run: node scripts/runner-search.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runner-search-state-1
+          path: _runner-out/result.json
+          retention-days: 7
+  search2:
+    needs: search1
+    if: ${{ needs.search1.result == 'success' && fromJSON(inputs.request).seconds > 18000 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: runner-search-state-1
+          path: _runner-prev
+      - name: Search segment 2
+        env:
+          SEARCH_REQUEST: ${{ inputs.request }}
+          PREVIOUS_RESULT: _runner-prev/result.json
+        run: node scripts/runner-search.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runner-search-state-2
+          path: _runner-out/result.json
+          retention-days: 7
+  search3:
+    needs: search2
+    if: ${{ needs.search2.result == 'success' && fromJSON(inputs.request).seconds > 36000 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: runner-search-state-2
+          path: _runner-prev
+      - name: Search segment 3
+        env:
+          SEARCH_REQUEST: ${{ inputs.request }}
+          PREVIOUS_RESULT: _runner-prev/result.json
+        run: node scripts/runner-search.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runner-search-state-3
+          path: _runner-out/result.json
+          retention-days: 7
+  search4:
+    needs: search3
+    if: ${{ needs.search3.result == 'success' && fromJSON(inputs.request).seconds > 54000 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: runner-search-state-3
+          path: _runner-prev
+      - name: Search segment 4
+        env:
+          SEARCH_REQUEST: ${{ inputs.request }}
+          PREVIOUS_RESULT: _runner-prev/result.json
+        run: node scripts/runner-search.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runner-search-state-4
+          path: _runner-out/result.json
+          retention-days: 7
+  search5:
+    needs: search4
+    if: ${{ needs.search4.result == 'success' && fromJSON(inputs.request).seconds > 72000 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: runner-search-state-4
+          path: _runner-prev
+      - name: Search segment 5
+        env:
+          SEARCH_REQUEST: ${{ inputs.request }}
+          PREVIOUS_RESULT: _runner-prev/result.json
+        run: node scripts/runner-search.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runner-search-state-5
+          path: _runner-out/result.json
+          retention-days: 7
+  search6:
+    needs: search5
+    if: ${{ needs.search5.result == 'success' && fromJSON(inputs.request).seconds > 90000 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: runner-search-state-5
+          path: _runner-prev
+      - name: Search segment 6
+        env:
+          SEARCH_REQUEST: ${{ inputs.request }}
+          PREVIOUS_RESULT: _runner-prev/result.json
+        run: node scripts/runner-search.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runner-search-state-6
+          path: _runner-out/result.json
+          retention-days: 7
+  search7:
+    needs: search6
+    if: ${{ needs.search6.result == 'success' && fromJSON(inputs.request).seconds > 108000 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: runner-search-state-6
+          path: _runner-prev
+      - name: Search segment 7
+        env:
+          SEARCH_REQUEST: ${{ inputs.request }}
+          PREVIOUS_RESULT: _runner-prev/result.json
+        run: node scripts/runner-search.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runner-search-state-7
+          path: _runner-out/result.json
+          retention-days: 7
+  search8:
+    needs: search7
+    if: ${{ needs.search7.result == 'success' && fromJSON(inputs.request).seconds > 126000 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: runner-search-state-7
+          path: _runner-prev
+      - name: Search segment 8
+        env:
+          SEARCH_REQUEST: ${{ inputs.request }}
+          PREVIOUS_RESULT: _runner-prev/result.json
+        run: node scripts/runner-search.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runner-search-state-8
+          path: _runner-out/result.json
+          retention-days: 7
+  search9:
+    needs: search8
+    if: ${{ needs.search8.result == 'success' && fromJSON(inputs.request).seconds > 144000 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: runner-search-state-8
+          path: _runner-prev
+      - name: Search segment 9
+        env:
+          SEARCH_REQUEST: ${{ inputs.request }}
+          PREVIOUS_RESULT: _runner-prev/result.json
+        run: node scripts/runner-search.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runner-search-state-9
+          path: _runner-out/result.json
+          retention-days: 7
+  search10:
+    needs: search9
+    if: ${{ needs.search9.result == 'success' && fromJSON(inputs.request).seconds > 162000 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: runner-search-state-9
+          path: _runner-prev
+      - name: Search segment 10
+        env:
+          SEARCH_REQUEST: ${{ inputs.request }}
+          PREVIOUS_RESULT: _runner-prev/result.json
+        run: node scripts/runner-search.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: runner-search-state-10
+          path: _runner-out/result.json
+          retention-days: 7
+  publish:
+    needs: [search1, search2, search3, search4, search5, search6, search7, search8, search9, search10]
+    if: ${{ always() && !cancelled() && needs.search1.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: runner-search-state-*
+          path: _runner-states
+      - name: Select completed checkpoint
+        env:
+          SEARCH_REQUEST: ${{ inputs.request }}
+        run: |
+          node - <<'NODE'
+          const fs=require('node:fs'),path=require('node:path');
+          const expected=JSON.parse(process.env.SEARCH_REQUEST).seconds,root='_runner-states';
+          const reports=fs.readdirSync(root,{withFileTypes:true}).filter(x=>x.isDirectory()).map(x=>JSON.parse(fs.readFileSync(path.join(root,x.name,'result.json'),'utf8'))).sort((a,b)=>b.result.elapsed-a.result.elapsed);
+          if(!reports.length)throw Error('Runner checkpoint artifact is missing.');
+          const best=reports[0];if(Math.abs(best.result.elapsed-expected)>1e-6)throw Error(`Runner search incomplete: ${best.result.elapsed}/${expected} seconds`);
+          fs.mkdirSync('_runner-out',{recursive:true});fs.writeFileSync('_runner-out/result.json',JSON.stringify(best));
+          NODE
+      - name: Publish results without changing the site or race data
+        run: node scripts/publish-runner-result.cjs

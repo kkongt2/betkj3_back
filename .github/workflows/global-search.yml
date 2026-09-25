@@ -1,0 +1,33 @@
+name: Verify global weight search
+on:
+  push:
+    branches: ['feature/global-search']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify global search and chronological separation
+        run: |
+          node tests/global-search.cjs
+          node tests/weight-search.cjs
+          node tests/joint-search.cjs
+          node tests/site.cjs
+      - name: Verify mobile worker and fallback
+        run: |
+          npm install --no-save --package-lock=false playwright@1.58.2
+          npx playwright install --with-deps chromium
+          node tests/global-search-browser.cjs
+          node tests/race-selection-browser.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: global-search-mobile
+          path: /tmp/global-search-*.png

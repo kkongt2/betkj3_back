@@ -1,0 +1,20 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),t=require('../tuning-model.js'),p=require('../qpl-policy.js'),m=require('../model.js'),presets=require('../strategy-presets.js'),e=require('../qpl-history-engine.js');
+const a=Array(17).fill(0),b=Array(17).fill(0);a[0]=100;b[1]=100;
+const old={min:2,max:6,modelMode:'custom',weights:a,weightScope:'venue',venueWeights:{seoul:b,busan:a,jeju:a}};
+assert.deepEqual(t.settings(old).weights,[...b,0,0,0,0]);assert(!('venueWeights' in t.settings(old)));
+assert.equal(t.settings({modelMode:'existing'}).modelMode,'custom');assert.equal(t.settings({weights:Array(13).fill(1)}).weights.length,t.FEATURES.length);
+const store={data:{},getItem(k){return this.data[k]||null},setItem(k,v){this.data[k]=v}};
+presets.save(store,'서울',old);assert.deepEqual(presets.read(store)[0].settings,{...t.settings(old),min:2,max:6});
+const race={venue:'seoul',date:'20250101',race_no:1,horses:Array.from({length:8},(_,i)=>({number:i+1,name:'H'+i,weighted_v3_features:Array.from({length:17},(_,j)=>j===0?i/7:j===1?1-i/7:.5)})),official_result:{starters:[1,2,3,4,5,6,7,8],pair:{status:'confirmed',payouts:[{numbers:[1,8],odds:4}]}}};
+const base=m.analyze(race);
+assert.equal(t.apply(base,{weights:a}).places[0].numbers[0],8);assert.equal(t.apply(base,{weights:b}).places[0].numbers[0],1);
+assert.throws(()=>t.apply({...base,venue:'busan'},old),/서울/);
+const row=t.pack(base,null),mixed=[row,{...row,venue:'busan'},{...row,venue:'jeju'}];
+const evaluator=e.create(mixed),x=evaluator.evaluateRow(0,{...old,weights:a,weightScope:undefined}),y=evaluator.evaluateRow(0,old);assert.notEqual(x.candidates[0].partner.number,y.candidates[0].partner.number);
+(async()=>{const g=await evaluator.evaluate({...old,min:2,max:8},'00000000','99999999');assert.equal(g.all.total,1);assert.deepEqual(Object.keys(g),['all','seoul','from','to','comparison','coverage']);assert.deepEqual(g.seoul,g.all);assert.equal(g.comparison.all.total,1);assert.equal(g.coverage.horses,8);assert.equal(g.coverage.features.length,t.FEATURES.length);
+ const manifest=JSON.parse(fs.readFileSync('qpl-history.json'));assert.equal(manifest.scope,'seoul');let n=0;for(const s of manifest.shards)for(const r of JSON.parse(fs.readFileSync(s.url)).rows){assert.equal(r.venue,'seoul');for(const h of r.horses){assert([17,t.FEATURES.length].includes(h[6]?.length));assert(h[6].every(v=>v>=0&&v<=1));if(h[7]?.through)assert(h[7].through<r.date);}n++;}assert.equal(n,manifest.races);assert(n>4000);
+ const latest=JSON.parse(fs.readFileSync('data/latest.json'));assert.equal(latest.scope,'seoul');assert(latest.races.every(r=>r.venue==='seoul'));assert(latest.calendar.every(d=>d.venues.length===1&&d.venues[0]==='seoul'));
+ for(const f of fs.readdirSync('data/calendar')){const d=JSON.parse(fs.readFileSync('data/calendar/'+f));assert(d.races.length>0&&d.races.every(r=>r.venue==='seoul'));}
+ const scale=JSON.parse(fs.readFileSync('data/weighted-v3-scaler.json'));assert.equal(scale.scope,'seoul');assert.equal(scale.version,'weighted-seoul-last5-v2');
+ console.log('PASS Seoul-only data, calendar, features, denominator, prediction guard, weight changes and saved-settings migration:',n,'races');
+})().catch(err=>{console.error(err);process.exitCode=1});

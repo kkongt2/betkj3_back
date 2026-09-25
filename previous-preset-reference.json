@@ -1,0 +1,101 @@
+{
+  "generatedAt": "2026-09-15T13:11:13.488Z",
+  "from": "20210108",
+  "to": "20260913",
+  "preset": {
+    "rank": 1,
+    "name": "서울 5경주 기준3 파생 1번",
+    "settings": {
+      "modelMode": "custom",
+      "weights": [
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        3,
+        0,
+        49,
+        25,
+        1,
+        0,
+        6,
+        5,
+        1,
+        9,
+        0
+      ],
+      "min": 2,
+      "max": 5
+    },
+    "all": {
+      "total": 5606,
+      "evaluated": 5523,
+      "hits": 845,
+      "excluded": 83,
+      "paidHits": 845,
+      "payoutTotal": 5421.999999999995
+    },
+    "years": {
+      "2021": {
+        "total": 786,
+        "evaluated": 704,
+        "hits": 104,
+        "excluded": 82,
+        "paidHits": 104,
+        "payoutTotal": 916.8
+      },
+      "2022": {
+        "total": 968,
+        "evaluated": 968,
+        "hits": 155,
+        "excluded": 0,
+        "paidHits": 155,
+        "payoutTotal": 899.0999999999998
+      },
+      "2023": {
+        "total": 1040,
+        "evaluated": 1039,
+        "hits": 158,
+        "excluded": 1,
+        "paidHits": 158,
+        "payoutTotal": 1137.1999999999998
+      },
+      "2024": {
+        "total": 1041,
+        "evaluated": 1041,
+        "hits": 144,
+        "excluded": 0,
+        "paidHits": 144,
+        "payoutTotal": 932.1999999999999
+      },
+      "2025": {
+        "total": 1033,
+        "evaluated": 1033,
+        "hits": 176,
+        "excluded": 0,
+        "paidHits": 176,
+        "payoutTotal": 971.9000000000003
+      },
+      "2026": {
+        "total": 738,
+        "evaluated": 738,
+        "hits": 108,
+        "excluded": 0,
+        "paidHits": 108,
+        "payoutTotal": 564.8000000000001
+      }
+    },
+    "metrics": {
+      "rate": 0.1529965598406663,
+      "average": 6.416568047337273,
+      "product": 0.9817128372261443
+    },
+    "baseId": 3,
+    "weightReallocation": 7,
+    "predictionHash": "1c7dce1210d9e92fbdabbcd530507c7c6fe4a085c68b009d871c507f5f85e1e6",
+    "nearestPairDifference": 0.14303820387470578,
+    "coverage": 0.9851944345344275
+  }
+}

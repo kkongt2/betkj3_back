@@ -1,0 +1,56 @@
+name: Verify joint selection before publishing
+on:
+  push:
+    branches: ['feature/joint-selection', 'feature/metrics-detail']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/checkout@v4
+        with:
+          repository: kkongt2/timeline
+          ref: main
+          path: _seed
+          sparse-checkout: |
+            training
+            scripts/model-research
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install requests beautifulsoup4 charset-normalizer
+      - run: python tests/last5-detail.py
+      - run: python scripts/prepare-weighted-v3.py
+      - run: node scripts/build-qpl-history.cjs
+      - run: node tests/last5-detail.cjs --archive
+      - name: Check models, time separation and persistence
+        run: |
+          node --check app.js
+          node tests/joint-search.cjs
+          node tests/race-selection.cjs
+          node tests/weight-search.cjs
+          node tests/weight-curves.cjs
+          node tests/site.cjs
+          node tests/seoul.cjs
+          node tests/seoul-report.cjs
+          node tests/evaluation-period.cjs --archive
+          node tests/archive.cjs
+      - name: Check mobile worker and fallback
+        run: |
+          npm install --no-save --package-lock=false playwright@1.58.2
+          npx playwright install --with-deps chromium
+          node tests/race-selection-browser.cjs
+          node tests/last5-detail-browser.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screening-mobile
+          path: /tmp/screening-*.png

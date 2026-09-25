@@ -1,0 +1,47 @@
+name: Verify anchor ranks and timed weight search
+on:
+  push:
+    branches: ['feature/anchor-search']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test policy, savings, fast ranking and timed search against Seoul archive
+        run: |
+          node --check app.js
+          node tests/qpl-policy.cjs
+          node tests/site.cjs
+          node tests/top5.cjs
+          node tests/weight-curves.cjs
+          node tests/weight-search.cjs --archive
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install browser test tools
+        run: |
+          npm install --prefix /tmp/curve-ui-deps playwright@1.62.1
+          node /tmp/curve-ui-deps/node_modules/playwright/cli.js install --with-deps chromium
+      - name: Test mobile worker and fallback search controls
+        env:
+          NODE_PATH: /tmp/curve-ui-deps/node_modules
+        run: node tests/curve-browser.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: weight-search-mobile-preview
+          path: |
+            /tmp/weight-curves-*.png
+            /tmp/weight-search-*.png
